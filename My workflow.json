@@ -1,0 +1,483 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        144,
+        0
+      ],
+      "id": "6a9adbf3-c62b-44c6-a2d7-461ace9ac3c7",
+      "name": "Telegram Trigger",
+      "webhookId": "c76810c9-c41a-43ec-be9e-0c6cdc7667d6",
+      "credentials": {
+        "telegramApi": {
+          "id": "J4D8ZPoLzPZaK6Fe",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message.text }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "exists",
+                      "singleValue": true
+                    },
+                    "id": "2d035a90-4a25-4786-84a3-6771ef0b729a"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Text"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "a4ac50d3-0396-4ea8-86ee-c418ff519cad",
+                    "leftValue": "={{ $json.message.voice.file_id }}",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "exists",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Voice"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        304,
+        0
+      ],
+      "id": "f94d0404-8616-42d4-a757-6e34444bab46",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c00475bf-cac9-4910-9899-b0fa442b4515",
+              "name": "Text",
+              "value": "={{ $('Telegram Trigger').item.json.message.text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        512,
+        -96
+      ],
+      "id": "0cf76571-13cb-4bcb-9b38-f7d23a687092",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $json.message.voice.file_id }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        512,
+        96
+      ],
+      "id": "3aac9f0a-e203-4847-ad41-13d295728aa8",
+      "name": "Get a file",
+      "webhookId": "76415923-9fec-40b3-9c7a-2692b2aab532",
+      "credentials": {
+        "telegramApi": {
+          "id": "J4D8ZPoLzPZaK6Fe",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-1.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-1.5-flash"
+        },
+        "inputType": "={{ $json.result.file_id }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        688,
+        96
+      ],
+      "id": "cf101058-dd39-42ab-a1d3-9cc042be5f23",
+      "name": "Transcribe a recording",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "x3dVcxT3jYt5eVW8",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.content.parts[0].text }}{{ $json.Text }}",
+        "options": {
+          "systemMessage": "Extract exactly four fields: item, amount, store, date.\n\nNormalize the date to ISO YYYY-MM-DD. Recognize natural words like \"today\" / \"yesterday\" and common date formats (e.g., 15/08/2025, 2025-08-15, 15-08-25) and convert them to YYYY-MM-DD. If no date is present, use the current date (today).\n\nAmount: extract the first clear numeric value (integer or decimal). Accept currency symbols (₺, $, €, £) but save only the number (use dot . for decimals). If no numeric value is present, leave amount empty.\n\nStore: detect a store/shop name from prepositions like \"from\", \"at\", \"in\", \"store\" (e.g., “from Migros”, “at Zara”). If none found, leave store empty.\n\nItem: extract the product or service name (short phrase). Prefer explicit item: markers; otherwise extract the noun phrase that best describes what was bought or paid for.\n\nLanguage: prefer extracting using the language present (English, Turkish, or Arabic). If the message is in Turkish use Turkish date words (e.g., “bugün”, “dün”), in Arabic use Arabic date words (e.g., “اليوم”, “أمس”).\n\nValidate before writing: check parsing confidence. If all four fields are non-empty (or at least item or amount present) then append automatically. If parsing is ambiguous (no amount and no item), do not append — instead return a JSON reply that requests a short clarification from the user.\n\nOutput format: produce a single JSON object exactly like this (no extra text) so it can be mapped to a sheet row:\n\n{\"item\":\"...\", \"amount\":\"...\", \"store\":\"...\", \"date\":\"YYYY-MM-DD\"}\n\n\nAppend mapping: map these fields to columns named exactly: Item, Amount, Store, Date (header row in sheet). Use Date as YYYY-MM-DD.\n\nLog: before appending, add a confidence score between 0.0 and 1.0 based on how many fields were clearly found (simple rule: 1.0 if all four non-empty; 0.75 if three; 0.5 if two; 0.25 if one; 0.0 if none). Include the confidence in the JSON only for debugging (the sheet append must still use only the four fields).\n\nEdge cases: if the text contains multiple purchases in one message, parse only the first purchase. If you detect an explicit list (e.g., \"1) jeans 2) socks ...\"), return multiple:true and include items_list array in the JSON (but do not auto-append — wait for manual review).\n\nAlways return exactly one JSON object as the agent’s output (so the workflow can map it to the Append Row node)."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        848,
+        -112
+      ],
+      "id": "cceff952-f997-4c2d-8231-7b46d013b4cb",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        896,
+        112
+      ],
+      "id": "b35d0438-026c-484e-9b31-b319d5f3a244",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "x3dVcxT3jYt5eVW8",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "= {{ $json.output }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1584,
+        -112
+      ],
+      "id": "f4b9265f-1b6b-4c79-af4c-9417d997b6a4",
+      "name": "Send a text message",
+      "webhookId": "bbdd3d80-07e6-4ef2-b26c-1827a8d32d19",
+      "credentials": {
+        "telegramApi": {
+          "id": "J4D8ZPoLzPZaK6Fe",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "=1Mz2CPEflub0pnpoMOG1ic6UaVhLA5oxiHfOUccAjr2I",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Mz2CPEflub0pnpoMOG1ic6UaVhLA5oxiHfOUccAjr2I/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        1040,
+        96
+      ],
+      "id": "cc7f3f00-76b4-43a5-a0b6-18390153e68d",
+      "name": "Get row(s) in sheet in Google Sheets",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "PHRB6CF6DNBBE916",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "1Mz2CPEflub0pnpoMOG1ic6UaVhLA5oxiHfOUccAjr2I",
+          "mode": "list",
+          "cachedResultName": "yaso n8n",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Mz2CPEflub0pnpoMOG1ic6UaVhLA5oxiHfOUccAjr2I/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Mz2CPEflub0pnpoMOG1ic6UaVhLA5oxiHfOUccAjr2I/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "item",
+              "displayName": "item",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "amount",
+              "displayName": "amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "store",
+              "displayName": "store",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "date",
+              "displayName": "date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1376,
+        -112
+      ],
+      "id": "a375fa90-c6a4-41e4-8d1e-bf9cfc03476c",
+      "name": "Append or update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "PHRB6CF6DNBBE916",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Function node code (legacy Function node style)\nconst rawField = (\n  items[0].json.output ||\n  items[0].json.text ||\n  items[0].json.message ||\n  items[0].json.body ||\n  ''\n) + '';\n\nlet s = rawField.trim();\n\n// remove ```json ... ``` fences if present\ns = s.replace(/```json\\s*/i, '').replace(/```/g, '').trim();\n\nlet parsed = {};\ntry {\n  parsed = (s && s[0] === '{') ? JSON.parse(s) : items[0].json;\n} catch (e) {\n  // try to extract a JSON substring\n  const m = s.match(/\\{[\\s\\S]*\\}/);\n  if (m) {\n    try { parsed = JSON.parse(m[0]); } catch(e2) { parsed = {}; }\n  } else parsed = {};\n}\n\n// helpers\nfunction normAmount(a){\n  if(!a && a !== 0) return '';\n  a = String(a);\n  const m = a.match(/([0-9]+(?:[.,][0-9]+)?)/);\n  return m ? m[1].replace(',', '.') : '';\n}\n\nfunction normDate(d){\n  const today = () => (new Date()).toISOString().slice(0,10);\n  if(!d) return today();\n  d = String(d).trim();\n  // words (english, turkish, arabic)\n  if(/\\b(today|bugün|اليوم)\\b/i.test(d)) return today();\n  if(/\\b(yesterday|dün|أمس)\\b/i.test(d)) {\n    const dt = new Date(); dt.setDate(dt.getDate()-1); return dt.toISOString().slice(0,10);\n  }\n  // yyyy-mm-dd\n  const iso = d.match(/\\d{4}-\\d{2}-\\d{2}/);\n  if(iso) return iso[0];\n  // dd/mm/yyyy or dd-mm-yyyy or dd/mm/yy\n  let m = d.match(/(\\b[0-3]?\\d)[\\/\\-.]([0-1]?\\d)[\\/\\-.](\\d{2,4})\\b/);\n  if(m){\n    let day = m[1].padStart(2,'0');\n    let mon = m[2].padStart(2,'0');\n    let yr = m[3];\n    if(yr.length === 2) yr = '20' + yr;\n    return `${yr}-${mon}-${day}`;\n  }\n  // fallback: try Date parse\n  const dd = new Date(d);\n  if(!isNaN(dd)) return dd.toISOString().slice(0,10);\n  return today();\n}\n\n// normalize keys (case variations)\nconst get = (k)=> parsed[k] ?? parsed[k.toLowerCase()] ?? parsed[k.charAt(0).toUpperCase()+k.slice(1)] ?? '';\n\n// build output\nconst out = {\n  item: (get('item') || get('Item') || '').toString().trim(),\n  amount: normAmount(get('amount') || get('price') || get('Amount') || ''),\n  store: (get('store') || get('Store') || '').toString().trim(),\n  date: normDate(get('date') || get('Date') || '')\n};\n\n// return single item with top-level fields for Sheets node\nreturn [{ json: out }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1168,
+        -112
+      ],
+      "id": "5ea35c94-183f-42c5-b01d-16245e8221b5",
+      "name": "Code"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get a file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a file": {
+      "main": [
+        [
+          {
+            "node": "Transcribe a recording",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribe a recording": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet in Google Sheets": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append or update row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Append or update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "71dd4ac9-60c6-49ee-9158-9e5c25e049fb",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "750ba24a134d6b067dad7d9dd31f79e5731b72b3b8ed8fc3d3ff390dcd7bd395"
+  },
+  "id": "92PNy0Nw92Sl4Biz",
+  "tags": []
+}
